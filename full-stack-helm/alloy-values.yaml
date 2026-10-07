@@ -1,0 +1,70 @@
+alloy:
+  mounts:
+    varlog: true
+    dockercontainers: true
+
+  configMap:
+    content: |
+      // 1. Discover all pods on the node
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      // 2. Map pod metadata into log file paths on disk
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pods.targets
+
+        // Build the node log path. $1 expands to "<pod-uid>/<container-name>"
+        // (source_labels joined by the "/" separator), so the glob becomes
+        // /var/log/pods/*<uid>/<container>/*.log which matches the real layout:
+        // /var/log/pods/<ns>_<pod>_<uid>/<container>/0.log
+        rule {
+          source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "__path__"
+          separator     = "/"
+          replacement   = "/var/log/pods/*$1/*.log"
+        }
+
+        // Extract metadata labels
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "service_name"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          target_label  = "app"
+        }
+      }
+
+      // 3. Expand the globs in __path__ into concrete files.
+      //    Unlike Promtail, Alloy's loki.source.file does NOT glob-expand
+      //    __path__ itself -- local.file_match does that.
+      local.file_match "pod_logs" {
+        path_targets = discovery.relabel.pod_logs.output
+      }
+
+      // 4. Tail the matched log files from disk
+      loki.source.file "pod_logs" {
+        targets    = local.file_match.pod_logs.targets
+        forward_to = [loki.write.local.receiver]
+      }
+
+      // 5. Push logs to Loki endpoint
+      loki.write "local" {
+        endpoint {
+          url = "http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push"
+        }
+      }

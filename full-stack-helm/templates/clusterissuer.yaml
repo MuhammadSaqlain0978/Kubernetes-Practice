@@ -1,0 +1,31 @@
+# apiVersion: cert-manager.io/v1
+# kind: ClusterIssuer
+# metadata:
+#   name: letsencrypt-prod
+# spec:
+#   acme:
+#     server: https://acme-v02.api.letsencrypt.org/directory
+#     email: saqlain.nazir@nexario.services   # Receive certificate renewal warnings
+#     privateKeySecretRef:
+#       name: letsencrypt-prod-account-key
+#     solvers:
+#       - http01:
+#           gatewayHTTPRoute:
+#             parentRefs:
+#               - name: my-gateway
+#                 namespace: dev  
+
+
+
+
+
+# # apiVersion: cert-manager.io/v1
+# # kind: ClusterIssuer
+
+# # metadata:
+# #   name: selfsigned-clusterissuer
+
+# # spec:
+# #   selfSigned: {}    #source of certificate, we use let-encrypt in production [lets-encrypt is CA:Certificate Authority]
+
+

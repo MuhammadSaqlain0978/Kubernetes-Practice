@@ -1,0 +1,67 @@
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+
+# metadata:
+#   name: backend-hpa
+
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment  # kisko scale krna-> deployment ko. We can also scale statefulset, replicaset
+#     name: backend
+
+#   minReplicas: {{ .Values.backend.hpa.minReplicas }}
+#   maxReplicas: {{ .Values.backend.hpa.maxReplicas }}
+
+#   behavior:
+#     scaleUp:
+#       stabilizationWindowSeconds: 0 #if scale up is triggered, scale up immediately if 0 seconds (
+
+#     scaleDown:
+#       stabilizationWindowSeconds: 60  #wait befor removing pods if scale down is triggered. (to avoid flapping of pod)
+#   metrics:
+
+#     - type: Resource #we can also add pod metrics, external metrics, object metrics...  Resource metrics means-> (cpu/memory)
+
+#       resource:
+#         name: cpu
+
+#         target:
+#           type: Utilization
+#           averageUtilization: {{ .Values.backend.hpa.targetCPUUtilization }}  # average utilization of all pods
+
+
+
+
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: {{ .Values.backend.hpa.minReplicas }}
+  maxReplicas: {{ .Values.backend.hpa.maxReplicas }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 15
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+    scaleDown:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.backend.hpa.targetCPUUtilization }}

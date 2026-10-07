@@ -1,0 +1,32 @@
+# 2. SECURITY POLICY
+# Attaches to HTTPRoute to manage CORS policies and JWT authentication
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: SecurityPolicy
+metadata:
+  name: api-security-policy
+  namespace: dev
+spec:
+  targetRef:
+      group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      name: full-stack-route
+  cors:
+    allowOrigins:
+      - "http://full-stack.local"
+      # - "https://full-stack.dev-ss.click"
+      # - "http://full-stack.dev-ss.click"
+    allowMethods:
+      - GET
+      - POST
+      - PUT
+      - DELETE
+    allowHeaders:
+      - Authorization
+      - Content-Type
+  # Optional: Enable JWT Validation on API routes
+  # jwt:
+  #   providers:
+  #     - name: auth0
+  #       issuer: "https://your-domain.auth0.com/"
+  #       remoteJwks:
+  #         uri: "https://your-domain.auth0.com/.well-known/jwks.json"

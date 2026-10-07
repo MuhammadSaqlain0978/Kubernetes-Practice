@@ -1,0 +1,16 @@
+apiVersion: opentelemetry.io/v1alpha1
+kind: Instrumentation
+metadata:
+  name: otel-instrumentation
+  namespace: dev
+spec:
+  exporter:
+    # Service DNS name pointing to your OTel Collector in the observability namespace
+    endpoint: http://otel-collector-opentelemetry-collector.observability.svc.cluster.local:4318
+  propagators:
+    - tracecontext
+    - baggage
+  python:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-python:latest
+  nodejs:
+    image: ghcr.io/open-telemetry/opentelemetry-operator/autoinstrumentation-nodejs:latest

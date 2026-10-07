@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: backend
+
+spec:
+  replicas: {{ .Values.backend.replicas }}
+
+  selector:
+    matchLabels:
+      app: backend
+
+  template:
+    metadata:
+      labels:
+        app: backend
+      annotations:
+        instrumentation.opentelemetry.io/inject-nodejs: "true"
+
+    spec:
+
+      containers:
+        - name: backend
+
+          image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
+
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+
+
+          ports:
+            - containerPort: {{ .Values.backend.service.port}}
+          resources:
+            requests:
+              cpu: {{ .Values.backend.resources.requests.cpu}}
+              memory: {{ .Values.backend.resources.requests.memory}}
+
+            limits:
+              cpu: {{ .Values.backend.resources.limits.cpu}}
+              memory: {{ .Values.backend.resources.limits.memory}}
+
+          env:
+
+            # Configmaps 
+
+            - name: APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: APP_NAME
+
+            - name: APP_ENV
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: APP_ENV
+
+            - name: BACKEND_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: backend-config
+                  key: BACKEND_PORT
+
+
+            # Secrets
+
+            - name: MONGO_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGO_USERNAME
+
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGO_PASSWORD
+
+
+
+

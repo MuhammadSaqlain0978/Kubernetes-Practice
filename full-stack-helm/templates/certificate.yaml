@@ -1,0 +1,14 @@
+# apiVersion: cert-manager.io/v1
+# kind: Certificate
+# metadata:
+#   name: dev-ss-cert
+#   namespace: dev
+# spec:
+#   secretName: dev-ss-tls-secret
+#   issuerRef:
+#     name: letsencrypt-prod
+#     kind: ClusterIssuer
+#   dnsNames:
+#     - "full-stack.dev-ss.click"
+
+

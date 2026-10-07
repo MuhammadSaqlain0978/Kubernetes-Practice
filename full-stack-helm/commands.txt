@@ -1,0 +1,39 @@
+
+
+# 1. Login to ECR
+aws ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 200268988035.dkr.ecr.us-west-1.amazonaws.com
+
+# Enable buildx instance if not already active
+docker buildx create --use
+
+# 1. Login to AWS ECR
+aws ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 200268988035.dkr.ecr.us-west-1.amazonaws.com
+
+#2. 
+docker buildx build \
+  --platform linux/amd64 \
+  --provenance=false \
+  -t 200268988035.dkr.ecr.us-west-1.amazonaws.com/eks_repo:frontend-1.0 \
+  --push \
+  ./frontend
+
+# 3. Build & Push BACKEND for linux/amd64
+docker buildx build \
+  --platform linux/amd64 \
+  --provenance=false \
+  -t 200268988035.dkr.ecr.us-west-1.amazonaws.com/eks_repo:backend-1.0 \
+  --push \
+  ./backend
+
+
+
+REPO_URI = 200268988035.dkr.ecr.us-west-1.amazonaws.com/eks_repo
+
+
+
+
+configure Cluster
+
+
+
+aws eks update-kubeconfig --region us-west-1 --name full-stack-cluster
