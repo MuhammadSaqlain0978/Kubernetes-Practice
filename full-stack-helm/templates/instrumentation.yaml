@@ -2,7 +2,7 @@ apiVersion: opentelemetry.io/v1alpha1
 kind: Instrumentation
 metadata:
   name: otel-instrumentation
-  namespace: dev
+  namespace: {{ .Release.Namespace }}
 spec:
   exporter:
     # Service DNS name pointing to your OTel Collector in the observability namespace

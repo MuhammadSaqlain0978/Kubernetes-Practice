@@ -1,8 +1,9 @@
+{{- if .Values.gateway.enabled }}
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: BackendTrafficPolicy
 metadata:
   name: api-rate-limit
-  namespace: dev
+  namespace: {{ .Release.Namespace }}
 spec:
   targetRef:
       group: gateway.networking.k8s.io
@@ -18,3 +19,4 @@ spec:
           limit:
             requests: 100
             unit: Minute
+{{- end }}

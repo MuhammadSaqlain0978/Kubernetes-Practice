@@ -1,21 +1,15 @@
+{{- if and .Values.gateway.enabled .Values.envoyProxy.enabled }}
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: EnvoyProxy
 metadata:
   name: internet-facing-proxy
-  namespace: envoy-gateway-system
+  namespace: {{ .Values.envoyProxy.namespace }}
 spec:
   provider:
     type: Kubernetes
     kubernetes:
       envoyService:
-        type: NodePort # instead of LoadBalancer(eks scenerio)
+        type: {{ .Values.envoyProxy.service.type }} # NodePort instead of LoadBalancer (EKS scenario)
         # annotations:
         #   service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-
-
-
-
-# how to know client ip
-# endopoint
-
- 
+{{- end }}

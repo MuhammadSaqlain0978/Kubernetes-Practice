@@ -1,10 +1,11 @@
+{{- if .Values.gateway.enabled }}
 # 1. CLIENT TRAFFIC POLICY
 # Configures ingress behavior at the Gateway level (XFF header IP preservation + TLS)
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: ClientTrafficPolicy
 metadata:
   name: gateway-client-config
-  namespace: dev
+  namespace: {{ .Release.Namespace }}
 spec:
   targetRef:
     group: gateway.networking.k8s.io
@@ -15,3 +16,4 @@ spec:
       numTrustedHops: 1
   headers:
     enableEnvoyHeaders: true
+{{- end }}

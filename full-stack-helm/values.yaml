@@ -47,6 +47,13 @@ mongodb:
     tag: "7.0"
     pullPolicy: IfNotPresent
 
+  # No defaults on purpose: credentials must come from --set (or -f secrets file),
+  # never committed to git. Example:
+  #   helm install ... --set mongodb.auth.username=admin --set mongodb.auth.password=...
+  auth:
+    username: ""
+    password: ""
+
   service:
     port: 27017
 
@@ -85,5 +92,8 @@ gateway:
 
 
 envoyProxy:
+  enabled: true
+  # EnvoyProxy CRs are read by the Envoy Gateway controller in its own namespace
+  namespace: envoy-gateway-system
   service:
     type: NodePort

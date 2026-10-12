@@ -1,7 +1,15 @@
-# apiVersion: gateway.networking.k8s.io/v1
-# kind: GatewayClass
-# metadata:
-#   name: eg
-# spec:
-#   controllerName: gateway.envoyproxy.io/gatewayclass-controller
-#   # 
+{{- if .Values.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: {{ .Values.gateway.gatewayClassName }}
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  {{- if .Values.envoyProxy.enabled }}
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: internet-facing-proxy
+    namespace: {{ .Values.envoyProxy.namespace }}
+  {{- end }}
+{{- end }}
