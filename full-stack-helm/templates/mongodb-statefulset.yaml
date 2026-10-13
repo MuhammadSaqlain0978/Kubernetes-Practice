@@ -28,6 +28,15 @@ spec:
           ports:
             - containerPort: {{ .Values.mongodb.service.port }}
 
+          resources:
+            requests:
+              cpu: {{ .Values.mongodb.resources.requests.cpu }}
+              memory: {{ .Values.mongodb.resources.requests.memory }}
+
+            limits:
+              cpu: {{ .Values.mongodb.resources.limits.cpu }}
+              memory: {{ .Values.mongodb.resources.limits.memory }}
+
           env:
             - name: MONGO_INITDB_ROOT_USERNAME
               valueFrom:

@@ -1,0 +1,32 @@
+# Values for the grafana/loki chart, sized for minikube.
+# The OTel collector pushes logs to loki.monitoring.svc.cluster.local:3100,
+# so install Loki into the monitoring namespace:
+#   helm repo add grafana https://grafana.github.io/helm-charts
+#   helm install loki grafana/loki -n monitoring --create-namespace -f loki-values.yaml
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false
+  commonConfig:
+    replication_factor: 1 # single binary — nothing to replicate across
+  storage:
+    type: filesystem # local PVC; on EKS you would use s3 instead
+
+singleBinary:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# Skip the test pods and self-monitoring the chart enables by default
+test:
+  enabled: false
+monitoring:
+  selfMonitoring:
+    enabled: false
+lokiCanary:
+  enabled: false

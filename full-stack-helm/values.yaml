@@ -2,8 +2,9 @@ frontend:
   replicas: 2
 
   image:
+    # Must match what you push to ECR (see commands.txt)
     repository: full-stack-frontend
-    tag: "1.0"
+    tag: "frontend-1.0"
     pullPolicy: IfNotPresent
 
   service:
@@ -11,13 +12,21 @@ frontend:
     port: 80
     targetPort: 80
 
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 
 backend:
   replicas: 2
 
   image:
     repository: full-stack-backend
-    tag: "1.0"
+    tag: "backend-1.0"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
@@ -47,9 +56,14 @@ mongodb:
     tag: "7.0"
     pullPolicy: IfNotPresent
 
-  # No defaults on purpose: credentials must come from --set (or -f secrets file),
-  # never committed to git. Example:
-  #   helm install ... --set mongodb.auth.username=admin --set mongodb.auth.password=...
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
   auth:
     username: ""
     password: ""
@@ -93,7 +107,18 @@ gateway:
 
 envoyProxy:
   enabled: true
-  # EnvoyProxy CRs are read by the Envoy Gateway controller in its own namespace
   namespace: envoy-gateway-system
   service:
     type: NodePort
+
+
+otel:
+  # Namespace where kube-prometheus-stack (Prometheus Operator) runs — the
+  # ServiceMonitor/PodMonitor must be placed there to be picked up
+  prometheusNamespace: observability
+
+  serviceMonitor:
+    enabled: true
+
+  podMonitor:
+    enabled: false # alternative to serviceMonitor — enable one, not both

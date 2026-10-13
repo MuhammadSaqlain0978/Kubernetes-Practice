@@ -1,3 +1,13 @@
+{{- if .Values.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-clusterissuer
+spec:
+  selfSigned: {}
+
+# EKS-ONLY
+#
 # apiVersion: cert-manager.io/v1
 # kind: ClusterIssuer
 # metadata:
@@ -13,19 +23,5 @@
 #           gatewayHTTPRoute:
 #             parentRefs:
 #               - name: my-gateway
-#                 namespace: dev  
-
-
-
-
-
-# # apiVersion: cert-manager.io/v1
-# # kind: ClusterIssuer
-
-# # metadata:
-# #   name: selfsigned-clusterissuer
-
-# # spec:
-# #   selfSigned: {}    #source of certificate, we use let-encrypt in production [lets-encrypt is CA:Certificate Authority]
-
-
+#                 namespace: {{ .Release.Namespace }}
+{{- end }}

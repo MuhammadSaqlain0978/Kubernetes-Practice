@@ -1,14 +1,15 @@
+{{- if .Values.otel.serviceMonitor.enabled }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: otel-collector-servicemonitor
-  namespace: observability
+  namespace: {{ .Values.otel.prometheusNamespace }}
   labels:
     release: kube-prometheus-stack
 spec:
   namespaceSelector:
     matchNames:
-      - observability
+      - {{ .Values.otel.prometheusNamespace }}
   selector:
     matchLabels:
       app.kubernetes.io/name: opentelemetry-collector
@@ -16,3 +17,4 @@ spec:
     - port: metrics
       path: /metrics
       interval: 15s
+{{- end }}

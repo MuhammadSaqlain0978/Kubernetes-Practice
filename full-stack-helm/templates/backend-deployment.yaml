@@ -5,7 +5,9 @@ metadata:
   name: backend
 
 spec:
+  {{- if not .Values.backend.hpa.enabled }}
   replicas: {{ .Values.backend.replicas }}
+  {{- end }}
 
   selector:
     matchLabels:
@@ -17,6 +19,8 @@ spec:
         app: backend
       annotations:
         instrumentation.opentelemetry.io/inject-nodejs: "true"
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
 
     spec:
 
@@ -29,7 +33,22 @@ spec:
 
 
           ports:
-            - containerPort: {{ .Values.backend.service.port}}
+            - containerPort: {{ .Values.backend.service.targetPort }}
+
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: {{ .Values.backend.service.targetPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: {{ .Values.backend.service.targetPort }}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+
           resources:
             requests:
               cpu: {{ .Values.backend.resources.requests.cpu}}
@@ -41,7 +60,7 @@ spec:
 
           env:
 
-            # Configmaps 
+            # Configmap
 
             - name: APP_NAME
               valueFrom:
