@@ -1,14 +1,18 @@
-# apiVersion: cert-manager.io/v1
-# kind: Certificate
-# metadata:
-#   name: dev-ss-cert
-#   namespace: dev
-# spec:
-#   secretName: dev-ss-tls-secret
-#   issuerRef:
-#     name: letsencrypt-prod
-#     kind: ClusterIssuer
-#   dnsNames:
-#     - "full-stack.dev-ss.click"
-
-
+{{- if .Values.certManager.enabled }}
+# Requests a TLS certificate for the gateway host and stores it in a Secret.
+# Default issuer is the self-signed ClusterIssuer below (works on minikube).
+# For EKS: set certManager.clusterIssuer=letsencrypt-prod 
+# Let's Encrypt issuer in clusterissuer.yaml 
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: full-stack-tls
+  namespace: {{ .Release.Namespace }}
+spec:
+  secretName: full-stack-tls-secret
+  issuerRef:
+    name: {{ .Values.certManager.clusterIssuer | default "selfsigned-clusterissuer" }}
+    kind: ClusterIssuer
+  dnsNames:
+    - {{ .Values.gateway.host | quote }}
+{{- end }}

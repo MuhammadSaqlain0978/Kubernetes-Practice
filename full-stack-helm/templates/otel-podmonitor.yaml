@@ -1,8 +1,11 @@
+# {{- if .Values.otel.podMonitor.enabled }}
+# # Pod-level scraping of the OTel collector.
+# # Requires kube-prometheus-stack 
 # apiVersion: monitoring.coreos.com/v1
 # kind: PodMonitor
 # metadata:
 #   name: otel-collector-monitor
-#   namespace: observability
+#   namespace: {{ .Values.otel.prometheusNamespace }}
 #   labels:
 #     release: kube-prometheus-stack
 # spec:
@@ -13,3 +16,4 @@
 #     - port: metrics
 #       path: /metrics
 #       interval: 15s
+# {{- end }}

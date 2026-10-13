@@ -1,9 +1,10 @@
+{{- if .Values.gateway.enabled }}
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
 
 metadata:
   name: my-gateway
-  namespace: dev
+  namespace: {{ .Release.Namespace }}
 
 spec:
   gatewayClassName: {{ .Values.gateway.gatewayClassName }}
@@ -17,3 +18,4 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+{{- end }}

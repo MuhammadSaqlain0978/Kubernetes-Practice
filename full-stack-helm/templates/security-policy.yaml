@@ -1,10 +1,11 @@
+{{- if .Values.gateway.enabled }}
 # 2. SECURITY POLICY
 # Attaches to HTTPRoute to manage CORS policies and JWT authentication
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
   name: api-security-policy
-  namespace: dev
+  namespace: {{ .Release.Namespace }}
 spec:
   targetRef:
       group: gateway.networking.k8s.io
@@ -30,3 +31,4 @@ spec:
   #       issuer: "https://your-domain.auth0.com/"
   #       remoteJwks:
   #         uri: "https://your-domain.auth0.com/.well-known/jwks.json"
+{{- end }}
