@@ -1,0 +1,115 @@
+# =============================================================================
+# generic-chart — deploy any app stack by changing ONLY values.
+# Every block is optional: leave it off and nothing renders.
+# =============================================================================
+
+fullnameOverride: ""   # set for short resource names (e.g. "demo" -> demo-app)
+
+# --- Shared config for all workloads -----------------------------------------
+configMap:
+  enabled: false
+  data: {}             # KEY: value (strings; pods receive them as env via envFromConfigMap)
+
+secret:
+  create: false
+  data: {}             # NEVER put real values here — pass with --set secret.data.KEY=...
+
+# --- Workloads: one entry = one Deployment. "service.enabled" adds a Service --
+# Key name becomes the component label and the resource-name suffix.
+apps: {}
+  # app:
+  #   enabled: true
+  #   replicas: 2
+  #   image: { repository: nginx, tag: "1.27-alpine", pullPolicy: IfNotPresent }
+  #   port: 80
+  #   command: []            # optional
+  #   args: []               # optional
+  #   env: { FOO: bar }      # plain values
+  #   envValueFrom:          # valueFrom refs (secretKeyRef / configMapKeyRef / fieldRef)
+  #   envFromConfigMap: true # inject ALL chart configmap keys as env
+  #   envFromSecret: true    # inject ALL chart secret keys as env
+  #   probes:                # raw k8s probe objects
+  #     readinessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 3 }
+  #     livenessProbe:  { httpGet: { path: /, port: 80 }, initialDelaySeconds: 10 }
+  #   resources: { requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 250m, memory: 256Mi} }
+  #   annotations: {}
+  #   service:
+  #     enabled: true
+  #     type: ClusterIP
+  #     port: 80           # defaults to app port
+  #     portName: http     # used by ServiceMonitor endpoint matching
+
+# --- One-shot Job (e.g. seed data) --------------------------------------------
+job:
+  enabled: false
+  name: seed
+  image: ""            # required when enabled
+  tag: ""
+  command: []
+  args: []
+  backoffLimit: 2
+  restartPolicy: Never
+
+# --- Pre-install hook (e.g. DB migration — runs BEFORE workloads) --------------
+hooks:
+  preInstall:
+    enabled: false
+    image: ""          # required when enabled
+    tag: ""
+    command: []
+    args: []
+    backoffLimit: 2
+
+# --- CronJob (e.g. cleanup) -----------------------------------------------------
+cronjob:
+  enabled: false
+  name: cleanup
+  schedule: "*/5 * * * *"
+  image: ""            # required when enabled
+  tag: ""
+  command: []
+  args: []
+
+# --- Ingress (nginx-style). Mutually exclusive with httpRoute in practice -------
+ingress:
+  enabled: false
+  className: nginx
+  host: app.local
+  annotations: {}
+  tls: []              # e.g. [{hosts: [app.local], secretName: app-tls}]
+  paths: []
+    # - { path: /, service: app, port: 80 }
+    # - { path: /api, service: app, port: 8000 }
+
+# --- ServiceMonitor (Prometheus Operator) ----------------------------------------
+serviceMonitor:
+  enabled: false
+  portName: http       # must match a Service portName
+  path: /metrics
+  interval: 30s
+  additionalLabels: {} # e.g. release: kube-prometheus-stack (required for that stack to pick it up)
+
+# --- Envoy Gateway routing (attaches to the EXISTING platform Gateway) ------------
+httpRoute:
+  enabled: false
+  parentName: ""       # name of the platform Gateway
+  parentNamespace: ""  # namespace the platform Gateway lives in
+  sectionName: http
+  hostnames: [app.local]
+  backends: []
+    # - { path: /, service: app, port: 80 }
+    # - { path: /api, service: app, port: 8000 }
+
+backendTrafficPolicy:
+  enabled: false       # only renders when httpRoute.enabled (it targets the route)
+  timeout: ""          # e.g. 5s
+  rateLimit:
+    type: Local        # Local (no extra infra, blocks reliably) | Global (needs ratelimit service)
+    requests: 100
+    unit: Minute
+
+securityPolicy:
+  enabled: false       # only renders when httpRoute.enabled
+  allowOrigins: ["http://app.local"]
+  allowMethods: []     # defaults: GET POST PUT DELETE
+  allowHeaders: []     # defaults: Authorization, Content-Type

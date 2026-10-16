@@ -1,0 +1,116 @@
+# Demo stack exercising every generic-chart feature at once.
+# Install with:
+#   helm install demo ../generic-chart -n demo --create-namespace \
+#     -f demo-values.yaml --set secret.data.DB_PASSWORD=demopass
+fullnameOverride: demo
+
+configMap:
+  enabled: true
+  data:
+    APP_ENV: demo
+    LOG_LEVEL: info
+
+secret:
+  create: true
+  data: {}   # DB_PASSWORD comes from --set (never committed)
+
+apps:
+  app:
+    enabled: true
+    replicas: 2
+    image: { repository: nginx, tag: "1.27-alpine" }
+    port: 80
+    envFromConfigMap: true
+    probes:
+      readinessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 3, periodSeconds: 5 }
+      livenessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 10, periodSeconds: 10 }
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 100m, memory: 128Mi }
+    service:
+      enabled: true
+      port: 80
+      portName: http
+
+  worker:
+    enabled: true
+    image: { repository: busybox, tag: "1.36" }
+    command: ["/bin/sh", "-c", "while true; do echo worker tick $(date); sleep 30; done"]
+    resources:
+      requests: { cpu: 10m, memory: 16Mi }
+    # no service — workers are not addressed directly
+
+  redis:
+    enabled: true
+    image: { repository: redis, tag: "7-alpine" }
+    port: 6379
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+    service:
+      enabled: true
+      port: 6379
+      portName: redis
+
+  metrics-exporter:
+    enabled: true
+    image: { repository: oliver006/redis_exporter, tag: "v1.61.0" }
+    port: 9121
+    env:
+      REDIS_ADDR: "redis://demo-redis:6379"
+    resources:
+      requests: { cpu: 10m, memory: 32Mi }
+    service:
+      enabled: true
+      port: 9121
+      portName: metrics
+
+job:
+  enabled: true
+  name: seed
+  image: busybox
+  tag: "1.36"
+  command: ["/bin/sh", "-c", "echo seeding demo data... && sleep 2 && echo seed done"]
+
+hooks:
+  preInstall:
+    enabled: true
+    image: busybox
+    tag: "1.36"
+    command: ["/bin/sh", "-c", "echo running DB migrations... && sleep 2 && echo migrations done"]
+
+cronjob:
+  enabled: true
+  name: cleanup
+  schedule: "*/2 * * * *"   # every 2 min so the first run is visible quickly
+  image: busybox
+  tag: "1.36"
+  command: ["/bin/sh", "-c", "echo cleaning up stale demo data"]
+
+serviceMonitor:
+  enabled: true
+  portName: metrics
+  path: /metrics
+  interval: 15s
+  additionalLabels:
+    release: kube-prometheus-stack
+
+httpRoute:
+  enabled: true
+  parentName: platform-gateway
+  parentNamespace: platform-gateway
+  sectionName: http
+  hostnames: [demo.local]
+  backends:
+    - { path: /, service: app, port: 80 }
+
+backendTrafficPolicy:
+  enabled: true
+  # timeout: 5s   # EG >= 1.2 only — this cluster runs EG 1.1 where the field shape differs
+  rateLimit:
+    type: Local        # blocks without extra infra — good for the "actually blocks" test
+    requests: 20
+    unit: Minute
+
+securityPolicy:
+  enabled: true
+  allowOrigins: ["http://demo.local"]

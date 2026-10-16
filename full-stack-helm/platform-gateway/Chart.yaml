@@ -1,0 +1,9 @@
+apiVersion: v2
+name: platform-gateway
+description: >-
+  Cluster-shared Envoy Gateway infrastructure: GatewayClass, Gateway,
+  EnvoyProxy (NodePort service) and ClientTrafficPolicy. Install ONCE per
+  cluster; every app chart attaches its HTTPRoute to this Gateway.
+type: application
+version: 0.1.0
+appVersion: "1.0"

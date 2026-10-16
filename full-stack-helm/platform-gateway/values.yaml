@@ -1,0 +1,14 @@
+gatewayClassName: platform-eg
+controllerName: gateway.envoyproxy.io/gatewayclass-controller
+
+gateway:
+  name: platform-gateway
+  port: 80
+
+envoyProxy:
+  name: platform-proxy
+  # EnvoyProxy CRs must live in the namespace where the Envoy Gateway
+  # controller runs so it picks them up
+  namespace: envoy-gateway-system
+  service:
+    type: NodePort

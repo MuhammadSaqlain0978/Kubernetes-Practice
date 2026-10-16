@@ -1,0 +1,82 @@
+{{- range $name, $app := .Values.apps }}
+{{- if $app.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "generic-chart.fullname" $ }}-{{ $name }}
+  labels:
+    {{- include "generic-chart.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $name }}
+spec:
+  {{- if $app.replicas }}
+  replicas: {{ $app.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "generic-chart.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $name }}
+  template:
+    metadata:
+      labels:
+        {{- include "generic-chart.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $name }}
+      annotations:
+        {{- if $.Values.configMap.enabled }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") $ | sha256sum }}
+        {{- end }}
+        {{- if $.Values.secret.create }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") $ | sha256sum }}
+        {{- end }}
+        {{- with $app.annotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: "{{ $app.image.repository }}:{{ $app.image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ $app.image.pullPolicy | default "IfNotPresent" }}
+          {{- with $app.command }}
+          command:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $app.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if $app.port }}
+          ports:
+            - containerPort: {{ $app.port }}
+          {{- end }}
+          {{- with $app.probes }}
+          {{- toYaml . | nindent 10 }}
+          {{- end }}
+          {{- with $app.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or $app.env $app.envValueFrom $.Values.configMap.enabled $.Values.secret.create $app.envFromConfigMap $app.envFromSecret }}
+          env:
+            {{- range $key, $value := $app.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- range $key, $ref := $app.envValueFrom }}
+            - name: {{ $key }}
+              valueFrom:
+                {{- toYaml $ref | nindent 16 }}
+            {{- end }}
+          {{- end }}
+          {{- if or $app.envFromConfigMap $app.envFromSecret }}
+          envFrom:
+            {{- if $app.envFromConfigMap }}
+            - configMapRef:
+                name: {{ include "generic-chart.fullname" $ }}-config
+            {{- end }}
+            {{- if $app.envFromSecret }}
+            - secretRef:
+                name: {{ include "generic-chart.fullname" $ }}-secret
+            {{- end }}
+          {{- end }}
+{{- end }}
+{{- end }}

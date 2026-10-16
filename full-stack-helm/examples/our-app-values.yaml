@@ -1,0 +1,99 @@
+# Our full-stack app deployed through the generic chart.
+#   helm install ourapp generic-chart -n ourapp --create-namespace \
+#     -f examples/our-app-values.yaml \
+#     --set secret.data.MONGO_PASSWORD=... \
+#     --set-string apps.mongo.image.tag=7.0
+# Requires the platform-gateway release installed and images loaded into
+# minikube (or pointing at your registry).
+fullnameOverride: fullstack
+
+configMap:
+  enabled: true
+  data:
+    APP_NAME: "Generic Chart App"
+    APP_ENV: "dev"
+    BACKEND_PORT: "8000"
+    MONGO_USERNAME: "admin"   # non-secret default; password always via --set
+
+secret:
+  create: true
+  data: {}            # MONGO_PASSWORD via --set; username is a non-secret default below
+
+apps:
+  backend:
+    enabled: true
+    replicas: 2
+    image: { repository: full-stack-backend, tag: "1.0" }
+    port: 8000
+    envFromConfigMap: true
+    envValueFrom:
+      MONGO_USERNAME:
+        configMapKeyRef: { name: fullstack-config, key: MONGO_USERNAME }
+      MONGO_PASSWORD:
+        secretKeyRef: { name: fullstack-secret, key: MONGO_PASSWORD }
+    probes:
+      readinessProbe: { httpGet: { path: /api/health, port: 8000 }, initialDelaySeconds: 5, periodSeconds: 10 }
+      livenessProbe: { httpGet: { path: /api/health, port: 8000 }, initialDelaySeconds: 15, periodSeconds: 20 }
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    service:
+      enabled: true
+      port: 8000
+      portName: http
+
+  frontend:
+    enabled: true
+    replicas: 2
+    image: { repository: full-stack-frontend, tag: "1.0" }
+    port: 80
+    probes:
+      readinessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 3, periodSeconds: 10 }
+      livenessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 10, periodSeconds: 20 }
+    resources:
+      requests: { cpu: 50m, memory: 64Mi }
+      limits: { cpu: 250m, memory: 256Mi }
+    service:
+      enabled: true
+      port: 80
+      portName: http
+
+  mongo:
+    enabled: true
+    replicas: 1
+    image: { repository: mongo, tag: "7.0" }
+    port: 27017
+    envValueFrom:
+      MONGO_INITDB_ROOT_USERNAME:
+        configMapKeyRef: { name: fullstack-config, key: MONGO_USERNAME }
+      MONGO_INITDB_ROOT_PASSWORD:
+        secretKeyRef: { name: fullstack-secret, key: MONGO_PASSWORD }
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 1Gi }
+    service:
+      enabled: true
+      port: 27017
+      portName: tcp
+
+httpRoute:
+  enabled: true
+  parentName: platform-gateway
+  parentNamespace: platform-gateway
+  sectionName: http
+  hostnames: [fullstack.local]
+  backends:
+    - { path: /api, service: backend, port: 8000 }
+    - { path: /, service: frontend, port: 80 }
+
+backendTrafficPolicy:
+  enabled: true
+  timeout: 10s
+  rateLimit:
+    type: Local
+    requests: 100
+    unit: Minute
+
+securityPolicy:
+  enabled: true
+  allowOrigins: ["http://fullstack.local"]
