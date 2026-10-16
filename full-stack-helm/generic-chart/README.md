@@ -54,7 +54,6 @@ The `corrections` branch could run **one container per app, Deployments only**, 
 | **Scheduling** | — | `nodeSelector`, `tolerations`, `affinity`, `imagePullSecrets` for every pod, overridable per app |
 | **Names** | Always `<name>-<key>` | Same, but the key **`default`** gets no suffix. See [section 2](#2-the-one-naming-rule). |
 | **Pod restarts on config change** | Every pod restarted when any config changed | Only the pods that **use** that ConfigMap/Secret restart |
-| **Typos in values** | Silently ignored | **Install fails** with the exact path (see [section 5](#5-mistakes-the-chart-catches-for-you)) |
 | **Broken references** (route → missing app, etc.) | Rendered a broken object | **Install fails** with a clear message |
 | **Docs** | None | This README, plus a commented example for every key in [`values.yaml`](values.yaml) |
 
@@ -71,7 +70,6 @@ templates/configmap.yaml                 templates/_services.tpl          (files
 templates/secret.yaml                    templates/_hpas.tpl              hold definitions; app.yaml
 templates/httproute.yaml                 templates/_jobs.tpl              pulls them in)
 ...                                      ... 16 files in total
-                                         values.schema.json            ← new: rejects typos
 ```
 
 The pod (containers, env, volumes, security) is defined **once** in `_helpers.tpl`, and apps, jobs, cron jobs and tests all use it. Before, jobs couldn't read the Secret because they had their own, smaller copy.
@@ -83,7 +81,7 @@ The pod (containers, env, volumes, security) is defined **once** in `_helpers.tp
 
 ### If you have a release from `corrections`
 
-The values format is different, so old values files must be rewritten. The chart rejects old keys like `configMap:`, `secret:` and `job:`.
+The values format is different, so old values files must be rewritten. Old keys like `configMap:`, `secret:` and `job:` are **ignored without an error**, so check the `helm template` output after converting.
 
 | Old | New |
 |---|---|
@@ -329,15 +327,7 @@ serviceMonitor:
 
 You'll see these errors on `helm install`, `helm upgrade`, `helm template` or `helm lint`, before anything reaches the cluster.
 
-**Typos and wrong types**, caught by [`values.schema.json`](values.schema.json):
-
-```
-- at '/apps/worker/containers/0': additional properties 'envFromSecret' not allowed   ← typo
-- at '/apps/worker/replicas': got string, want integer                               ← wrong type
-- at '': additional properties 'secret' not allowed                                   ← old key from corrections
-```
-
-**Broken references and missing pieces**, caught by the templates:
+**Broken references and missing pieces:**
 
 ```
 httpRoutes.default.rules[0].backendRefs[0]: service "nope" must be an enabled apps.<key> with service.enabled: true
@@ -346,6 +336,8 @@ jobs.migrate.containers[0].envFromSecrets: "defualt" must be an enabled secrets 
 apps.redis.containers[0].image is required (or set the release-wide image)
 apps.worker.hpa: a DaemonSet can't be autoscaled (one pod per node)
 ```
+
+**Not caught: misspelled keys.** The chart has no values schema, so a misspelled key (e.g. `envFromSecret` instead of `envFromSecrets`, or the old `configMap:`) is **silently ignored**, just like on `corrections`. Run `helm template` and check the output for what you expect.
 
 Envoy Gateway policy settings are passed through unchanged, so the chart doesn't check them. The cluster rejects invalid ones when the release is applied.
 
@@ -410,7 +402,6 @@ helm s3 push generic-chart-0.2.0.tgz central
 ```
 generic-chart/
   values.yaml          defaults + a commented example for every key
-  values.schema.json   what keys/types are allowed
   templates/
     app.yaml           the only rendered file: one include line per _*.tpl
     _helpers.tpl       shared functions: names, the pod template, job spec, policy spec
@@ -419,7 +410,7 @@ generic-chart/
 
 | To add… | Do this |
 |---|---|
-| a new values key | add it to `values.yaml` (with a comment) **and** `values.schema.json`, or the schema will reject it |
+| a new values key | add it to `values.yaml` with a comment |
 | a new pod/container field | add it once in `podTemplate` / `container` in `_helpers.tpl`, and apps, jobs, cron jobs and tests all get it |
 | a new resource kind | create `_<kind>.tpl` with `define "generic-chart.<kind>"`, then add one `include` line to `app.yaml` |
 

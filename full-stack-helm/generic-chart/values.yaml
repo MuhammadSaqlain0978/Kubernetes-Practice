@@ -10,7 +10,7 @@
 # apps.worker = Deployment "my-app-worker", secrets.default = Secret "my-app".
 #
 # Every block is optional; an entry renders only with enabled: true.
-# Unknown keys and wrong types are rejected by values.schema.json.
+# Misspelled keys are ignored (no schema) — check `helm template` output.
 # =============================================================================
 
 nameOverride: ""
