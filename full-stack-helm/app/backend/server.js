@@ -24,7 +24,7 @@ const MONGO_PASSWORD = process.env.MONGO_PASSWORD;
 // DATABASE CONNECTION
 // ==========================================
 
-const mongoHost = "mongodb";
+const mongoHost = process.env.MONGO_HOST || "mongodb";
 
 const mongoUri =
   `mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}` +

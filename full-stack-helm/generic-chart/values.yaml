@@ -1,115 +1,247 @@
 # =============================================================================
-# generic-chart — deploy any app stack by changing ONLY values.
-# Every block is optional: leave it off and nothing renders.
+# generic-chart — the central chart. Each service is ONE release of it, driven
+# by its own values file:
+#   helm upgrade --install my-app oci://<registry>/helm-charts/generic-chart \
+#     --version <x.y.z> -f my-app-values.yaml
+#
+# NAMING: every map below is keyed. A resource is named <fullname>-<key>, and
+# the key "default" gets NO suffix (just <fullname>). E.g. with
+# fullnameOverride: my-app → apps.default = Deployment "my-app",
+# apps.worker = Deployment "my-app-worker", secrets.default = Secret "my-app".
+#
+# Every block is optional; an entry renders only with enabled: true.
+# Misspelled keys are ignored (no schema) — check `helm template` output.
 # =============================================================================
 
-fullnameOverride: ""   # set for short resource names (e.g. "demo" -> demo-app)
+nameOverride: ""
+fullnameOverride: ""   # set it to the application name (e.g. my-app)
 
-# --- Shared config for all workloads -----------------------------------------
-configMap:
-  enabled: false
-  data: {}             # KEY: value (strings; pods receive them as env via envFromConfigMap)
+# --- Release-wide defaults ----------------------------------------------------
+image: ""                    # default image for every container that sets none
+imagePullPolicy: IfNotPresent
 
-secret:
-  create: false
-  data: {}             # NEVER put real values here — pass with --set secret.data.KEY=...
+# Pod settings applied to every app/job/cronJob/test. An entry that sets the
+# same key replaces the default for itself (replace, not merge — `{}`/`[]`
+# opts out). securityContext can also be set per container.
+defaults:
+  podSecurityContext: {}   # e.g. { runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+  securityContext: {}      # container-level, e.g. { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+  imagePullSecrets: []     # e.g. [{ name: regcred }]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
 
-# --- Workloads: one entry = one Deployment. "service.enabled" adds a Service --
-# Key name becomes the component label and the resource-name suffix.
-apps: {}
-  # app:
+# --- ServiceAccount every pod in the release runs as --------------------------
+serviceAccount:
+  create: false        # true = chart creates <fullname> (or `name`)
+  name: ""             # create=false: an existing SA to use ("" = namespace default)
+  annotations: {}      # e.g. eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/<role>  (IRSA)
+  automountServiceAccountToken: false   # true only if the app calls the Kubernetes API
+
+# --- ConfigMaps: env vars OR files -------------------------------------------
+configMaps: {}
+  # default:                     # → ConfigMap <fullname>; pods: envFromConfigMaps: [default]
   #   enabled: true
-  #   replicas: 2
-  #   image: { repository: nginx, tag: "1.27-alpine", pullPolicy: IfNotPresent }
-  #   port: 80
-  #   command: []            # optional
-  #   args: []               # optional
-  #   env: { FOO: bar }      # plain values
-  #   envValueFrom:          # valueFrom refs (secretKeyRef / configMapKeyRef / fieldRef)
-  #   envFromConfigMap: true # inject ALL chart configmap keys as env
-  #   envFromSecret: true    # inject ALL chart secret keys as env
-  #   probes:                # raw k8s probe objects
-  #     readinessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 3 }
-  #     livenessProbe:  { httpGet: { path: /, port: 80 }, initialDelaySeconds: 10 }
-  #   resources: { requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 250m, memory: 256Mi} }
-  #   annotations: {}
-  #   service:
+  #   data:
+  #     APP_ENV: production
+  #     LOG_LEVEL: info
+  # nginx:                       # → ConfigMap <fullname>-nginx; mounted as a file:
+  #   enabled: true              #   volumes: [{ name: nginx, configMap: nginx }]
+  #   data:                      #   volumeMounts: [{ name: nginx, mountPath: /etc/nginx/conf.d }]
+  #     default.conf: |
+  #       server { listen 80; }
+
+# --- Secrets ------------------------------------------------------------------
+secrets: {}
+  # default:                     # → Secret <fullname>; pods: envFromSecrets: [default]
+  #   enabled: true
+  #   type: Opaque
+  #   data: {}                   # NEVER commit real values — --set secrets.default.data.KEY=...
+
+# Synced from a secret manager by External Secrets Operator. Creates Secret
+# <fullname>[-<key>], used exactly like secrets.<key> (envFromSecrets, volumes).
+externalSecrets: {}
+  # external:
+  #   enabled: true
+  #   apiVersion: external-secrets.io/v1    # older ESO: external-secrets.io/v1beta1
+  #   refreshInterval: 1h
+  #   secretStoreRef: { name: aws-secrets-manager, kind: ClusterSecretStore }
+  #   dataFrom:                              # all keys of one secret...
+  #     - extract: { key: prod/my-app }
+  #   data:                                  # ...and/or single keys
+  #     - secretKey: DB_PASSWORD
+  #       remoteRef: { key: prod/my-app, property: db_password }
+
+# --- Shared volumes (one PVC for the release; mount with volumes: [{name, pvc: <key>}])
+persistentVolumeClaims: {}
+  # data:                        # → PVC <fullname>-data
+  #   enabled: true
+  #   size: 10Gi
+  #   accessModes: [ReadWriteOnce]
+  #   storageClassName: ""       # empty = cluster default
+  #   keep: false                # true = survive `helm uninstall`
+
+# --- Workloads: one entry = one Deployment / StatefulSet / DaemonSet -----------
+apps: {}
+  # default:                     # → Deployment <fullname>
+  #   enabled: true
+  #   kind: Deployment           # Deployment (default) | StatefulSet | DaemonSet
+  #   replicas: 2                # ignored for DaemonSet and when hpa is enabled
+  #   revisionHistoryLimit: 3
+  #   strategy: {}               # Deployment strategy / StatefulSet+DaemonSet updateStrategy
+  #   annotations: {}            # pod annotations
+  #   podSecurityContext: {}     # override defaults.* for this app (same for the keys below)
+  #   securityContext: {}
+  #   nodeSelector: {}
+  #   tolerations: []
+  #   affinity: {}
+  #   imagePullSecrets: []
+  #   volumes:                   # pod volumes, by values key
+  #     - { name: config, configMap: nginx }
+  #     - { name: creds,  secret: default }
+  #     - { name: data,   pvc: data }
+  #     - { name: tmp,    emptyDir: {} }
+  #   containers:                # one or more (main app + sidecars)
+  #     - name: app
+  #       image: ""              # empty = release-wide image
+  #       imagePullPolicy: ""
+  #       command: []
+  #       args: []
+  #       ports:
+  #         - { name: http, containerPort: 80, protocol: TCP }
+  #       env: { FOO: bar }
+  #       envValueFrom:          # raw valueFrom (secretKeyRef / configMapKeyRef / fieldRef)
+  #       envFromConfigMaps: [default]   # configMaps.<key> → all keys as env
+  #       envFromSecrets: [default]      # secrets.<key> or externalSecrets.<key>
+  #       volumeMounts:
+  #         - { name: config, mountPath: /etc/nginx/conf.d, readOnly: true }
+  #       probes:                # raw k8s probes
+  #         readinessProbe: { httpGet: { path: /, port: http } }
+  #         livenessProbe:  { httpGet: { path: /, port: http } }
+  #         startupProbe:   {}
+  #       lifecycle: {}          # raw k8s lifecycle hooks
+  #       resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { memory: 256Mi } }
+  #       securityContext: {}    # overrides the app/defaults securityContext
+  #   service:                   # → Service <fullname>[-<key>]
   #     enabled: true
   #     type: ClusterIP
-  #     port: 80           # defaults to app port
-  #     portName: http     # used by ServiceMonitor endpoint matching
+  #     annotations: {}
+  #     ports: []                # default: every named container port (port = containerPort)
+  #       # - { name: http, port: 80, targetPort: http }
+  #   hpa:                       # → HorizontalPodAutoscaler (needs metrics-server)
+  #     enabled: false
+  #     minReplicas: 1
+  #     maxReplicas: 5
+  #     targetCPUUtilizationPercentage: 70
+  #     targetMemoryUtilizationPercentage: 80
+  #     behavior: {}             # raw autoscaling/v2 behavior
+  #   persistence:               # StatefulSet only — one PVC per pod, mounted in the FIRST container
+  #     size: 1Gi
+  #     mountPath: /data
+  #     storageClass: ""
+  #     accessMode: ReadWriteOnce
 
-# --- One-shot Job (e.g. seed data) --------------------------------------------
-job:
-  enabled: false
-  name: seed
-  image: ""            # required when enabled
-  tag: ""
-  command: []
-  args: []
-  backoffLimit: 2
-  restartPolicy: Never
+# --- Jobs (one-shot, or Helm hooks) ---------------------------------------------
+# Same pod fields as apps (containers, volumes, defaults overrides...) — no
+# service/hpa/persistence.
+jobs: {}
+  # migrate:
+  #   enabled: true
+  #   hook: pre-install,pre-upgrade                          # omit for a plain Job
+  #   hookWeight: 0                                          # lower runs first
+  #   hookDeletePolicy: before-hook-creation,hook-succeeded  # default
+  #   backoffLimit: 2
+  #   restartPolicy: Never
+  #   activeDeadlineSeconds: 600
+  #   ttlSecondsAfterFinished: 600   # default for plain jobs (they re-run on upgrade)
+  #   containers:
+  #     - name: migrate
+  #       command: ["php", "artisan", "migrate", "--force"]
+  #       envFromSecrets: [default]
+  # Any enabled pre-* hook job turns the release's ConfigMaps, Secrets,
+  # ExternalSecrets and ServiceAccount into pre-install hooks (weight -10) so
+  # they exist before the job runs. Hook resources are not removed by
+  # "helm uninstall".
 
-# --- Pre-install hook (e.g. DB migration — runs BEFORE workloads) --------------
-hooks:
-  preInstall:
-    enabled: false
-    image: ""          # required when enabled
-    tag: ""
-    command: []
-    args: []
-    backoffLimit: 2
+# --- CronJobs -----------------------------------------------------------------
+cronJobs: {}
+  # cleanup:
+  #   enabled: true
+  #   schedule: "*/5 * * * *"        # required
+  #   timeZone: ""                   # e.g. Europe/Berlin
+  #   concurrencyPolicy: Forbid      # Allow | Forbid | Replace
+  #   suspend: false
+  #   startingDeadlineSeconds: 0
+  #   successfulJobsHistoryLimit: 3
+  #   failedJobsHistoryLimit: 1
+  #   backoffLimit: 2
+  #   containers:
+  #     - name: cleanup
+  #       command: ["php", "artisan", "schedule:run"]
 
-# --- CronJob (e.g. cleanup) -----------------------------------------------------
-cronjob:
-  enabled: false
-  name: cleanup
-  schedule: "*/5 * * * *"
-  image: ""            # required when enabled
-  tag: ""
-  command: []
-  args: []
+# --- Tests: pods run by `helm test <release>` ---------------------------------
+tests: {}
+  # connection:                  # → Pod <fullname>-test-connection
+  #   enabled: true
+  #   containers:
+  #     - name: wget
+  #       image: busybox:1.36
+  #       command: ["wget", "-qO-", "my-app:80"]
 
-# --- Ingress (nginx-style). Mutually exclusive with httpRoute in practice -------
-ingress:
-  enabled: false
-  className: nginx
-  host: app.local
-  annotations: {}
-  tls: []              # e.g. [{hosts: [app.local], secretName: app-tls}]
-  paths: []
-    # - { path: /, service: app, port: 80 }
-    # - { path: /api, service: app, port: 8000 }
+# --- Routing: Gateway API (attaches to the platform Gateway) -------------------
+httpRoutes: {}
+  # default:                     # → HTTPRoute <fullname>
+  #   enabled: true
+  #   parentRefs:                # raw Gateway API parentRefs
+  #     - { name: platform-gateway, namespace: platform-gateway, sectionName: http }
+  #   hostnames: [my-app.example.com]
+  #   rules:
+  #     - matches:               # raw Gateway API matches
+  #         - path: { type: PathPrefix, value: / }
+  #       filters: []            # raw Gateway API filters (header modifiers, rewrites...)
+  #       backendRefs:
+  #         - { service: default, port: 80 }   # service = apps.<key> (with service.enabled)
+  #           # weight: 1
+
+# Envoy Gateway policies. Each targets routes BY KEY (targetHttpRoutes,
+# default [default]); every other field is the Envoy Gateway spec, passed as-is.
+backendTrafficPolicies: {}
+  # default:                     # → BackendTrafficPolicy <fullname>
+  #   enabled: true
+  #   targetHttpRoutes: [default]
+  #   timeout: { http: { requestTimeout: 30s } }
+  #   rateLimit:
+  #     type: Local
+  #     local: { rules: [{ limit: { requests: 100, unit: Minute } }] }
+  #   circuitBreaker: { maxConnections: 1024 }
+
+securityPolicies: {}
+  # default:                     # → SecurityPolicy <fullname>
+  #   enabled: true
+  #   targetHttpRoutes: [default]
+  #   cors:
+  #     allowOrigins: ["https://my-app.example.com"]
+  #     allowMethods: [GET, POST, PUT, DELETE]
+  #     allowHeaders: [Authorization, Content-Type]
+  #   # jwt: { providers: [...] }  # any other SecurityPolicy field works too
+
+# --- Routing: classic Ingress (for clusters without Gateway API) -----------------
+ingresses: {}
+  # default:                     # → Ingress <fullname>
+  #   enabled: true
+  #   className: nginx
+  #   annotations: {}
+  #   tls: []                    # e.g. [{ hosts: [my-app.example.com], secretName: my-app-tls }]
+  #   rules:
+  #     - host: my-app.example.com
+  #       paths:
+  #         - { path: /, pathType: Prefix, service: default, port: 80 }
 
 # --- ServiceMonitor (Prometheus Operator) ----------------------------------------
 serviceMonitor:
   enabled: false
-  portName: http       # must match a Service portName
+  portName: http       # scrapes every release Service port with this name
   path: /metrics
   interval: 30s
+  scrapeTimeout: ""
   additionalLabels: {} # e.g. release: kube-prometheus-stack (required for that stack to pick it up)
-
-# --- Envoy Gateway routing (attaches to the EXISTING platform Gateway) ------------
-httpRoute:
-  enabled: false
-  parentName: ""       # name of the platform Gateway
-  parentNamespace: ""  # namespace the platform Gateway lives in
-  sectionName: http
-  hostnames: [app.local]
-  backends: []
-    # - { path: /, service: app, port: 80 }
-    # - { path: /api, service: app, port: 8000 }
-
-backendTrafficPolicy:
-  enabled: false       # only renders when httpRoute.enabled (it targets the route)
-  timeout: ""          # e.g. 5s
-  rateLimit:
-    type: Local        # Local (no extra infra, blocks reliably) | Global (needs ratelimit service)
-    requests: 100
-    unit: Minute
-
-securityPolicy:
-  enabled: false       # only renders when httpRoute.enabled
-  allowOrigins: ["http://app.local"]
-  allowMethods: []     # defaults: GET POST PUT DELETE
-  allowHeaders: []     # defaults: Authorization, Content-Type
