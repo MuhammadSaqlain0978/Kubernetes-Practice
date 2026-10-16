@@ -1,3 +1,5 @@
+{{/* apps.<key> → Deployment | StatefulSet | DaemonSet <fullname>[-<key>] */}}
+{{- define "generic-chart.workloads" -}}
 {{- range $name, $app := .Values.apps }}
 {{- if $app.enabled }}
 {{- $kind := $app.kind | default "Deployment" }}
@@ -8,15 +10,22 @@
 apiVersion: apps/v1
 kind: {{ $kind }}
 metadata:
-  {{- include "generic-chart.metadata" (dict "root" $ "name" $name "component" $name) | nindent 2 }}
+  {{- include "generic-chart.metadata" (dict "root" $ "key" $name "component" $name) | nindent 2 }}
 spec:
-  {{- /* DaemonSets run one pod per node, so they have no replicas */}}
-  {{- if and (ne $kind "DaemonSet") $app.replicas }}
+  {{- /* DaemonSets have no replicas; with an HPA, the HPA owns the count */}}
+  {{- if and (ne $kind "DaemonSet") (not ($app.hpa).enabled) (hasKey $app "replicas") }}
   replicas: {{ $app.replicas }}
   {{- end }}
+  {{- with $app.revisionHistoryLimit }}
+  revisionHistoryLimit: {{ . }}
+  {{- end }}
+  {{- with $app.strategy }}
+  {{ eq $kind "Deployment" | ternary "strategy" "updateStrategy" }}:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   {{- if eq $kind "StatefulSet" }}
-  # Governing Service — the one services.yaml creates for this app
-  serviceName: {{ include "generic-chart.fullname" $ }}-{{ $name }}
+  # Governing Service — the one _services.tpl creates for this app
+  serviceName: {{ include "generic-chart.resourceName" (dict "root" $ "key" $name) }}
   {{- end }}
   selector:
     matchLabels:
@@ -39,5 +48,6 @@ spec:
           requests:
             storage: {{ $app.persistence.size | default "1Gi" }}
   {{- end }}
+{{- end }}
 {{- end }}
 {{- end }}

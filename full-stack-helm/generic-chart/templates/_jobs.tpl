@@ -1,3 +1,5 @@
+{{/* jobs.<key> → Job <fullname>[-<key>]; with `hook`, a Helm hook Job */}}
+{{- define "generic-chart.jobs" -}}
 {{- range $name, $job := .Values.jobs }}
 {{- if $job.enabled }}
 {{- $annotations := dict }}
@@ -19,8 +21,9 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  {{- include "generic-chart.metadata" (dict "root" $ "name" $name "component" $name "annotations" $annotations) | nindent 2 }}
+  {{- include "generic-chart.metadata" (dict "root" $ "key" $name "component" $name "annotations" $annotations) | nindent 2 }}
 spec:
   {{- include "generic-chart.jobSpec" (dict "root" $ "name" $name "spec" $job "path" (printf "jobs.%s" $name)) | nindent 2 }}
+{{- end }}
 {{- end }}
 {{- end }}

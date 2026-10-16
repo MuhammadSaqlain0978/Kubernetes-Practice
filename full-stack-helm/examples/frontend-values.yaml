@@ -1,16 +1,18 @@
-# Frontend service (static React app on nginx) — ONE release of generic-chart.
+# Frontend service (static React app on nginx) — one release of the central chart.
 # Owns "/" on the shared hostname; the backend release owns "/api". The browser
 # calls /api on the same host, so the Gateway routes it straight to the backend.
 #
-#   helm upgrade --install frontend generic-chart -n fullstack --create-namespace \
-#     -f examples/frontend-values.yaml
+#   helm upgrade --install frontend oci://<registry>/helm-charts/generic-chart --version 0.2.0 \
+#     -n fullstack --create-namespace -f frontend-values.yaml
 #
-# Images: built from app/frontend and pushed to ECR (see commands.txt). For
-# minikube, override with --set apps.web.image=full-stack-frontend:1.0
+# Image: built from app/frontend and pushed to ECR (see commands.txt). For
+# minikube: --set image=full-stack-frontend:1.0
 fullnameOverride: frontend
 
+image: 200268988035.dkr.ecr.us-west-1.amazonaws.com/eks_repo:frontend-1.0
+
 serviceAccount:
-  create: true        # pods run as "frontend", no API token mounted
+  create: true                 # pods run as "frontend", no API token mounted
 
 # nginx:alpine starts as root (binds :80, then drops to the nginx user for
 # workers), so no runAsNonRoot / capability drop here — just block escalation.
@@ -21,35 +23,53 @@ defaults:
     allowPrivilegeEscalation: false
 
 apps:
-  web:
+  default:                     # → Deployment + Service "frontend"
     enabled: true
     replicas: 2
-    image: 200268988035.dkr.ecr.us-west-1.amazonaws.com/eks_repo:frontend-1.0
-    port: 80
-    probes:
-      readinessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 3, periodSeconds: 10 }
-      livenessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 10, periodSeconds: 20 }
-    resources:
-      requests: { cpu: 50m, memory: 64Mi }
-      limits: { cpu: 250m, memory: 256Mi }
+    containers:
+      - name: web
+        ports:
+          - { name: http, containerPort: 80 }
+        probes:
+          readinessProbe: { httpGet: { path: /, port: http }, initialDelaySeconds: 3, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /, port: http }, initialDelaySeconds: 10, periodSeconds: 20 }
+        resources:
+          requests: { cpu: 50m, memory: 64Mi }
+          limits: { cpu: 250m, memory: 256Mi }
     service:
       enabled: true
-      port: 80
-      portName: http
 
-httpRoute:
-  enabled: true
-  parentName: platform-gateway
-  parentNamespace: platform-gateway
-  sectionName: http
-  hostnames: [fullstack.local]
-  backends:
-    - { path: /, service: web, port: 80 }
+tests:
+  connection:
+    enabled: true
+    containers:
+      - name: wget
+        image: busybox:1.36
+        command: ["wget", "-qO-", "http://frontend:80/"]
 
-backendTrafficPolicy:
-  enabled: true
-  timeout: 10s
-  rateLimit:
-    type: Local
-    requests: 300       # static assets: more requests per page than the API
-    unit: Minute
+httpRoutes:
+  default:                     # → HTTPRoute "frontend"
+    enabled: true
+    parentRefs:
+      - { name: platform-gateway, namespace: platform-gateway, sectionName: http }
+    hostnames: [fullstack.local]
+    rules:
+      - matches:
+          - path: { type: PathPrefix, value: / }
+        filters:               # security headers on every page
+          - type: ResponseHeaderModifier
+            responseHeaderModifier:
+              set:
+                - { name: X-Frame-Options, value: SAMEORIGIN }
+                - { name: X-Content-Type-Options, value: nosniff }
+        backendRefs:
+          - { service: default, port: 80 }
+
+backendTrafficPolicies:
+  default:
+    enabled: true
+    targetHttpRoutes: [default]
+    timeout: { http: { requestTimeout: 10s } }
+    rateLimit:
+      type: Local
+      local: { rules: [{ limit: { requests: 300, unit: Minute } }] }   # static assets: more requests per page

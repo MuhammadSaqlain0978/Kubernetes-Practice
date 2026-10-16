@@ -1,0 +1,20 @@
+{{- /*
+The only rendered file. Every resource is defined in one _*.tpl file next to
+it; each renders nothing unless enabled in values. Helpers: _helpers.tpl.
+*/}}
+{{- include "generic-chart.serviceAccount" . }}          {{- /* _serviceaccount.tpl */}}
+{{- include "generic-chart.configMaps" . }}              {{- /* _configmaps.tpl:              configMaps.*     */}}
+{{- include "generic-chart.secrets" . }}                 {{- /* _secrets.tpl:                 secrets.*        */}}
+{{- include "generic-chart.externalSecrets" . }}         {{- /* _externalsecrets.tpl:         externalSecrets.* */}}
+{{- include "generic-chart.persistentVolumeClaims" . }}  {{- /* _pvcs.tpl:                    persistentVolumeClaims.* */}}
+{{- include "generic-chart.workloads" . }}               {{- /* _workloads.tpl:               apps.*           */}}
+{{- include "generic-chart.services" . }}                {{- /* _services.tpl:                apps.*.service   */}}
+{{- include "generic-chart.hpas" . }}                    {{- /* _hpas.tpl:                    apps.*.hpa       */}}
+{{- include "generic-chart.jobs" . }}                    {{- /* _jobs.tpl:                    jobs.*           */}}
+{{- include "generic-chart.cronJobs" . }}                {{- /* _cronjobs.tpl:                cronJobs.*       */}}
+{{- include "generic-chart.tests" . }}                   {{- /* _tests.tpl:                   tests.*          */}}
+{{- include "generic-chart.ingresses" . }}               {{- /* _ingresses.tpl:               ingresses.*      */}}
+{{- include "generic-chart.httpRoutes" . }}              {{- /* _httproutes.tpl:              httpRoutes.*     */}}
+{{- include "generic-chart.backendTrafficPolicies" . }}  {{- /* _backendtrafficpolicies.tpl:  backendTrafficPolicies.* */}}
+{{- include "generic-chart.securityPolicies" . }}        {{- /* _securitypolicies.tpl:        securityPolicies.* */}}
+{{- include "generic-chart.serviceMonitor" . }}          {{- /* _servicemonitor.tpl */}}

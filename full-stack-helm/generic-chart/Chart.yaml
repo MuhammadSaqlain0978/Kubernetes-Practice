@@ -1,13 +1,13 @@
 apiVersion: v2
 name: generic-chart
 description: >-
-  A reusable chart that deploys any number of app workloads (Deployments,
-  StatefulSets, DaemonSets), Jobs / Helm hook Jobs and CronJobs from values
-  only — all sharing one pod spec — with optional Services, ConfigMap,
-  Secret (or an existing one), ServiceAccount, Ingress, ServiceMonitor, and Envoy Gateway routing
-  (HTTPRoute + BackendTrafficPolicy + SecurityPolicy). Gateway-class resources
-  (GatewayClass/Gateway/EnvoyProxy/ClientTrafficPolicy) live in the separate
-  platform-gateway chart.
+  Central chart: one release = one service, configured only by its values file.
+  Keyed maps (the key "default" = no name suffix) for workloads with any number
+  of containers, Services, HPAs, Jobs / Helm hook Jobs, CronJobs, helm tests,
+  ConfigMaps (env or files), Secrets, ExternalSecrets, PVCs, ServiceAccount,
+  Ingresses, ServiceMonitor and Envoy Gateway routing (HTTPRoutes +
+  BackendTrafficPolicies + SecurityPolicies). Gateway-class resources live in
+  the separate platform-gateway chart.
 type: application
 version: 0.2.0
 appVersion: "1.0"

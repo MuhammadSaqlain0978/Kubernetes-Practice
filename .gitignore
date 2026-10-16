@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Helm build output
+*.tgz
+**/charts/
+Chart.lock
+
+# Local reference files that may hold real secrets / internal hostnames
+sample_values.yaml
+
+# Editor
+.vscode/
+.idea/

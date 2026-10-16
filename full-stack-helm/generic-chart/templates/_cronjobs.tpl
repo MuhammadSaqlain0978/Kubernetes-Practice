@@ -1,3 +1,5 @@
+{{/* cronJobs.<key> → CronJob <fullname>[-<key>] */}}
+{{- define "generic-chart.cronJobs" -}}
 {{- range $name, $cj := .Values.cronJobs }}
 {{- if $cj.enabled }}
 {{- $path := printf "cronJobs.%s" $name }}
@@ -5,7 +7,7 @@
 apiVersion: batch/v1
 kind: CronJob
 metadata:
-  {{- include "generic-chart.metadata" (dict "root" $ "name" $name "component" $name) | nindent 2 }}
+  {{- include "generic-chart.metadata" (dict "root" $ "key" $name "component" $name) | nindent 2 }}
 spec:
   schedule: {{ required (printf "%s.schedule is required" $path) $cj.schedule | quote }}
   {{- with $cj.timeZone }}
@@ -23,5 +25,6 @@ spec:
   jobTemplate:
     spec:
       {{- include "generic-chart.jobSpec" (dict "root" $ "name" $name "spec" $cj "path" $path) | nindent 6 }}
+{{- end }}
 {{- end }}
 {{- end }}
