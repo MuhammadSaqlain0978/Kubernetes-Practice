@@ -3,9 +3,7 @@
 apiVersion: gateway.envoyproxy.io/v1alpha1
 kind: SecurityPolicy
 metadata:
-  name: {{ include "generic-chart.fullname" . }}
-  labels:
-    {{- include "generic-chart.labels" . | nindent 4 }}
+  {{- include "generic-chart.metadata" (dict "root" .) | nindent 2 }}
 spec:
   targetRef:
     group: gateway.networking.k8s.io

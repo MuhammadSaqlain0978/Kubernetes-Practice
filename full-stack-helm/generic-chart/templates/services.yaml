@@ -4,10 +4,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "generic-chart.fullname" $ }}-{{ $name }}
-  labels:
-    {{- include "generic-chart.labels" $ | nindent 4 }}
-    app.kubernetes.io/component: {{ $name }}
+  {{- include "generic-chart.metadata" (dict "root" $ "name" $name "component" $name) | nindent 2 }}
 spec:
   type: {{ $app.service.type | default "ClusterIP" }}
   selector:

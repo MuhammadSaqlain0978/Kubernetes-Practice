@@ -1,0 +1,110 @@
+# Backend service (API + its MongoDB) — ONE release of generic-chart.
+# The frontend is a separate release (frontend-values.yaml); both attach
+# HTTPRoutes to the same platform Gateway/hostname: "/api" here, "/" there.
+#
+#   helm upgrade --install backend generic-chart -n fullstack --create-namespace \
+#     -f examples/backend-values.yaml \
+#     --set secret.data.MONGO_PASSWORD=...
+#
+# Images: built from app/backend and pushed to ECR (see commands.txt). For
+# minikube, override with --set apps.api.image=full-stack-backend:1.0
+fullnameOverride: backend
+
+configMap:
+  enabled: true
+  data:
+    APP_NAME: "Generic Chart App"
+    APP_ENV: "dev"
+    BACKEND_PORT: "8000"
+    MONGO_HOST: "backend-mongo"   # Service created for apps.mongo below
+    MONGO_USERNAME: "admin"       # non-secret default; password always via --set
+
+secret:
+  create: true
+  data: {}            # MONGO_PASSWORD via --set
+  # existing: backend-mongo-creds   # instead of create/data: Secret from External Secrets / Vault
+
+serviceAccount:
+  create: true        # pods run as "backend", no API token mounted
+  annotations: {}
+    # eks.amazonaws.com/role-arn: arn:aws:iam::<account>:role/backend   # IRSA, if the API needs AWS access
+
+# Release-wide hardening (node runs fine as the image's "node" user, uid 1000)
+defaults:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    seccompProfile: { type: RuntimeDefault }
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities: { drop: [ALL] }
+
+apps:
+  api:
+    enabled: true
+    replicas: 2
+    image: 200268988035.dkr.ecr.us-west-1.amazonaws.com/eks_repo:backend-1.0
+    port: 8000
+    envFromConfigMap: true      # APP_*, BACKEND_PORT, MONGO_HOST, MONGO_USERNAME
+    envFromSecret: true         # MONGO_PASSWORD
+    probes:
+      readinessProbe: { httpGet: { path: /api/health, port: 8000 }, initialDelaySeconds: 5, periodSeconds: 10 }
+      livenessProbe: { httpGet: { path: /api/health, port: 8000 }, initialDelaySeconds: 15, periodSeconds: 20 }
+    resources:
+      requests: { cpu: 100m, memory: 128Mi }
+      limits: { cpu: 500m, memory: 512Mi }
+    service:
+      enabled: true
+      port: 8000
+      portName: http
+
+  mongo:
+    kind: StatefulSet
+    enabled: true
+    replicas: 1
+    image: mongo:7.0
+    port: 27017
+    envValueFrom:
+      MONGO_INITDB_ROOT_USERNAME:
+        configMapKeyRef: { name: backend-config, key: MONGO_USERNAME }
+      MONGO_INITDB_ROOT_PASSWORD:
+        secretKeyRef: { name: backend-secret, key: MONGO_PASSWORD }
+    # Override: mongo's own user (999); fsGroup makes the PVC writable for it
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 999
+      runAsGroup: 999
+      fsGroup: 999
+      seccompProfile: { type: RuntimeDefault }
+    persistence:
+      size: 1Gi
+      mountPath: /data/db
+    resources:
+      requests: { cpu: 100m, memory: 256Mi }
+      limits: { cpu: 500m, memory: 1Gi }
+    service:
+      enabled: true
+      port: 27017
+      portName: tcp
+
+httpRoute:
+  enabled: true
+  parentName: platform-gateway
+  parentNamespace: platform-gateway
+  sectionName: http
+  hostnames: [fullstack.local]
+  backends:
+    - { path: /api, service: api, port: 8000 }
+
+backendTrafficPolicy:
+  enabled: true
+  timeout: 10s
+  rateLimit:
+    type: Local
+    requests: 100
+    unit: Minute
+
+securityPolicy:
+  enabled: true
+  allowOrigins: ["http://fullstack.local"]

@@ -14,11 +14,22 @@ secret:
   create: true
   data: {}   # DB_PASSWORD comes from --set (never committed)
 
+serviceAccount:
+  create: true                  # every pod runs as "demo" (no API token mounted)
+
+# Hardening for every pod in the release. nginx/redis images start as root,
+# so the defaults stay root-compatible; the worker below opts into non-root.
+defaults:
+  podSecurityContext:
+    seccompProfile: { type: RuntimeDefault }
+  securityContext:
+    allowPrivilegeEscalation: false
+
 apps:
   app:
     enabled: true
     replicas: 2
-    image: { repository: nginx, tag: "1.27-alpine" }
+    image: nginx:1.27-alpine
     port: 80
     envFromConfigMap: true
     probes:
@@ -34,15 +45,24 @@ apps:
 
   worker:
     enabled: true
-    image: { repository: busybox, tag: "1.36" }
+    image: busybox:1.36
     command: ["/bin/sh", "-c", "while true; do echo worker tick $(date); sleep 30; done"]
+    # Per-app override: replaces defaults.* for this pod only
+    podSecurityContext:
+      runAsNonRoot: true
+      runAsUser: 65534          # nobody
+      seccompProfile: { type: RuntimeDefault }
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities: { drop: [ALL] }
     resources:
       requests: { cpu: 10m, memory: 16Mi }
     # no service — workers are not addressed directly
 
   redis:
     enabled: true
-    image: { repository: redis, tag: "7-alpine" }
+    image: redis:7-alpine
     port: 6379
     resources:
       requests: { cpu: 50m, memory: 64Mi }
@@ -53,7 +73,7 @@ apps:
 
   metrics-exporter:
     enabled: true
-    image: { repository: oliver006/redis_exporter, tag: "v1.61.0" }
+    image: oliver006/redis_exporter:v1.61.0
     port: 9121
     env:
       REDIS_ADDR: "redis://demo-redis:6379"
@@ -64,27 +84,24 @@ apps:
       port: 9121
       portName: metrics
 
-job:
-  enabled: true
-  name: seed
-  image: busybox
-  tag: "1.36"
-  command: ["/bin/sh", "-c", "echo seeding demo data... && sleep 2 && echo seed done"]
-
-hooks:
-  preInstall:
+jobs:
+  seed:
     enabled: true
-    image: busybox
-    tag: "1.36"
+    image: busybox:1.36
+    command: ["/bin/sh", "-c", "echo seeding demo data... && sleep 2 && echo seed done"]
+  migrate:
+    enabled: true
+    image: busybox:1.36
+    hook: pre-install,pre-upgrade
+    envFromSecret: true       # needs DB_PASSWORD — chart Secret is created first as a hook
     command: ["/bin/sh", "-c", "echo running DB migrations... && sleep 2 && echo migrations done"]
 
-cronjob:
-  enabled: true
-  name: cleanup
-  schedule: "*/2 * * * *"   # every 2 min so the first run is visible quickly
-  image: busybox
-  tag: "1.36"
-  command: ["/bin/sh", "-c", "echo cleaning up stale demo data"]
+cronJobs:
+  cleanup:
+    enabled: true
+    schedule: "*/2 * * * *"   # every 2 min so the first run is visible quickly
+    image: busybox:1.36
+    command: ["/bin/sh", "-c", "echo cleaning up stale demo data"]
 
 serviceMonitor:
   enabled: true

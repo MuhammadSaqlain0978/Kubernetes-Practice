@@ -2,9 +2,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: {{ include "generic-chart.fullname" . }}-config
-  labels:
-    {{- include "generic-chart.labels" . | nindent 4 }}
+  {{- include "generic-chart.metadata" (dict "root" . "name" "config" "annotations" (include "generic-chart.preHookAnnotations" . | fromYaml)) | nindent 2 }}
 data:
   {{- range $key, $value := .Values.configMap.data }}
   {{ $key }}: {{ $value | quote }}

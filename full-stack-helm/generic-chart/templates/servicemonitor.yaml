@@ -3,12 +3,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "generic-chart.fullname" . }}
-  labels:
-    {{- include "generic-chart.labels" . | nindent 4 }}
-    {{- with .Values.serviceMonitor.additionalLabels }}
-    {{- toYaml . | nindent 4 }}
-    {{- end }}
+  {{- include "generic-chart.metadata" (dict "root" . "labels" .Values.serviceMonitor.additionalLabels) | nindent 2 }}
 spec:
   selector:
     matchLabels:

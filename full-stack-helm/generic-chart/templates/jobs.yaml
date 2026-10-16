@@ -1,0 +1,26 @@
+{{- range $name, $job := .Values.jobs }}
+{{- if $job.enabled }}
+{{- $annotations := dict }}
+{{- if $job.hook }}
+{{- /* Helm runs hook resources first, in weight order, and blocks the rest of
+       the install until they succeed — that's what guarantees "migration
+       before the app starts". */}}
+{{- $annotations = dict
+      "helm.sh/hook" $job.hook
+      "helm.sh/hook-weight" (toString ($job.hookWeight | default 0))
+      "helm.sh/hook-delete-policy" ($job.hookDeletePolicy | default "before-hook-creation,hook-succeeded") }}
+{{- else }}
+{{- /* A Job's pod template is immutable, so a plain Job that's still around
+       makes "helm upgrade" fail as soon as its spec changes. Expire it after it
+       finishes; Helm recreates (= re-runs) it on the next upgrade. */}}
+{{- $job = mergeOverwrite (dict "ttlSecondsAfterFinished" 600) $job }}
+{{- end }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  {{- include "generic-chart.metadata" (dict "root" $ "name" $name "component" $name "annotations" $annotations) | nindent 2 }}
+spec:
+  {{- include "generic-chart.jobSpec" (dict "root" $ "name" $name "spec" $job "path" (printf "jobs.%s" $name)) | nindent 2 }}
+{{- end }}
+{{- end }}

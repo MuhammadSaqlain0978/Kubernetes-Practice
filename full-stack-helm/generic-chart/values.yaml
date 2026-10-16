@@ -1,26 +1,55 @@
 # =============================================================================
-# generic-chart — deploy any app stack by changing ONLY values.
+# generic-chart — deploy ONE service (one release) by changing ONLY values.
 # Every block is optional: leave it off and nothing renders.
+# Unknown keys are rejected by values.schema.json, so typos fail loudly.
+# See README.md for the full reference.
 # =============================================================================
 
+nameOverride: ""       # replaces the chart name in <release>-<name>
 fullnameOverride: ""   # set for short resource names (e.g. "demo" -> demo-app)
 
-# --- Shared config for all workloads -----------------------------------------
+# --- Shared config for all workloads in this release -------------------------
 configMap:
   enabled: false
   data: {}             # KEY: value (strings; pods receive them as env via envFromConfigMap)
 
 secret:
-  create: false
+  create: false        # chart renders <fullname>-secret from data
   data: {}             # NEVER put real values here — pass with --set secret.data.KEY=...
+  existing: ""         # OR use a Secret created elsewhere (External Secrets, Vault...)
 
-# --- Workloads: one entry = one Deployment. "service.enabled" adds a Service --
+# --- ServiceAccount every pod in the release runs as --------------------------
+serviceAccount:
+  create: false        # true = chart creates <fullname> (or `name`)
+  name: ""             # create=false: an existing SA to use ("" = namespace default)
+  annotations: {}      # e.g. eks.amazonaws.com/role-arn: arn:aws:iam::<acct>:role/<role>  (IRSA)
+  automountServiceAccountToken: false   # true only if the app calls the Kubernetes API
+
+# --- Release-wide pod defaults (apps, jobs, cronJobs) --------------------------
+# Any entry can set the same key to replace the default for itself
+# (replace, not merge — set `{}` / `[]` to opt out).
+defaults:
+  podSecurityContext: {}   # pod-level, e.g. { runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000, seccompProfile: { type: RuntimeDefault } }
+  securityContext: {}      # container-level, e.g. { allowPrivilegeEscalation: false, capabilities: { drop: [ALL] } }
+  imagePullSecrets: []     # e.g. [{ name: regcred }]
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# --- Workloads: one entry = one workload. "service.enabled" adds a Service ----
 # Key name becomes the component label and the resource-name suffix.
 apps: {}
   # app:
   #   enabled: true
-  #   replicas: 2
-  #   image: { repository: nginx, tag: "1.27-alpine", pullPolicy: IfNotPresent }
+  #   kind: Deployment         # Deployment (default) | StatefulSet | DaemonSet
+  #   replicas: 2              # ignored for DaemonSet (one pod per node)
+  #   persistence:             # StatefulSet only — one PVC per pod
+  #     size: 1Gi
+  #     mountPath: /data       # required when persistence is set
+  #     storageClass: ""       # empty = cluster default
+  #     accessMode: ReadWriteOnce
+  #   image: nginx:1.27-alpine     # full "repo:tag" string (registry/repo:tag or @sha256 digest also fine)
+  #   imagePullPolicy: IfNotPresent
   #   port: 80
   #   command: []            # optional
   #   args: []               # optional
@@ -32,43 +61,56 @@ apps: {}
   #     readinessProbe: { httpGet: { path: /, port: 80 }, initialDelaySeconds: 3 }
   #     livenessProbe:  { httpGet: { path: /, port: 80 }, initialDelaySeconds: 10 }
   #   resources: { requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 250m, memory: 256Mi} }
-  #   annotations: {}
+  #   annotations: {}        # pod annotations
+  #   podSecurityContext: {} # override defaults.* for this app (same for the keys below)
+  #   securityContext: {}
+  #   nodeSelector: {}
+  #   tolerations: []
+  #   affinity: {}
+  #   imagePullSecrets: []
   #   service:
   #     enabled: true
   #     type: ClusterIP
   #     port: 80           # defaults to app port
   #     portName: http     # used by ServiceMonitor endpoint matching
 
-# --- One-shot Job (e.g. seed data) --------------------------------------------
-job:
-  enabled: false
-  name: seed
-  image: ""            # required when enabled
-  tag: ""
-  command: []
-  args: []
-  backoffLimit: 2
-  restartPolicy: Never
+# --- Jobs (one-shot, or Helm hooks) ---------------------------------------------
+# Map keyed by job name (becomes <fullname>-<name>). Jobs and cronJobs take the
+# SAME pod fields as apps (image, imagePullPolicy, command, args, env,
+# envValueFrom, envFromConfigMap, envFromSecret, resources, annotations and the
+# defaults.* overrides) — no port/probes/service.
+jobs: {}
+  # seed:
+  #   enabled: true
+  #   image: busybox:1.36
+  #   command: []
+  #   backoffLimit: 2
+  #   restartPolicy: Never
+  #   ttlSecondsAfterFinished: 600   # default for plain jobs (re-runs on upgrade)
+  # migrate:
+  #   enabled: true
+  #   image: busybox:1.36
+  #   envFromSecret: true
+  #   hook: pre-install,pre-upgrade                          # omit for a plain Job
+  #   hookWeight: 0                                          # lower runs first
+  #   hookDeletePolicy: before-hook-creation,hook-succeeded  # default
+  # Any enabled pre-* hook job turns the chart ConfigMap/Secret/ServiceAccount
+  # into pre-install hooks (weight -10) so they exist before the job runs. Hook
+  # resources are not removed by "helm uninstall".
 
-# --- Pre-install hook (e.g. DB migration — runs BEFORE workloads) --------------
-hooks:
-  preInstall:
-    enabled: false
-    image: ""          # required when enabled
-    tag: ""
-    command: []
-    args: []
-    backoffLimit: 2
-
-# --- CronJob (e.g. cleanup) -----------------------------------------------------
-cronjob:
-  enabled: false
-  name: cleanup
-  schedule: "*/5 * * * *"
-  image: ""            # required when enabled
-  tag: ""
-  command: []
-  args: []
+# --- CronJobs: one entry = one CronJob ------------------------------------------
+cronJobs: {}
+  # cleanup:
+  #   enabled: true
+  #   schedule: "*/5 * * * *"        # required
+  #   timeZone: ""                   # e.g. Europe/Berlin
+  #   concurrencyPolicy: Forbid      # Allow | Forbid | Replace
+  #   suspend: false
+  #   successfulJobsHistoryLimit: 3
+  #   failedJobsHistoryLimit: 1
+  #   backoffLimit: 2
+  #   image: busybox:1.36
+  #   command: []
 
 # --- Ingress (nginx-style). Mutually exclusive with httpRoute in practice -------
 ingress:
